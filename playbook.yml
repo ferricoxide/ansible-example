@@ -15,6 +15,7 @@
         update_only: true
 
     - name: Reboot required
+      become: true
       ansible.builtin.command: "/usr/bin/needs-restarting -r"
       register: reboot_required
       ignore_errors: true
@@ -25,6 +26,7 @@
         - ansible_facts['distribution_major_version'] >= "7"
 
     - name: Rebooting
+      become: true
       ansible.builtin.reboot:
         post_reboot_delay: 60
       throttle: 1
