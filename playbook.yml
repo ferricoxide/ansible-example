@@ -1,47 +1,34 @@
-- hosts: all
+---
+- name: Keep hosts up to date
+  hosts: all
   gather_facts: true
   ignore_unreachable: true
   vars_files:
     - vars/default.yml
   tasks:
-    - name: Install Apache packages
+    - name: Ensure system's RPMs are up to date
       become: true
+      become_flags: "-r unconfined_r -t unconfined_t"
       ansible.builtin.yum:
-        name: httpd
-        state: present
+        name: '*'
+        state: latest
+        update_only: true
 
-    - name: Create document root
-      become: true
-      ansible.builtin.file:
-        state: directory
-        dest: "{{ doc_root }}"
-        mode: 0701
+    - name: Reboot required
+      ansible.builtin.command: "/usr/bin/needs-restarting -r"
+      register: reboot_required
+      ignore_errors: true
+      changed_when: false
+      failed_when:
+        - reboot_required.rc == 2
+      when:
+        - ansible_facts['distribution_major_version'] >= "7"
 
-    - name: Create configuration file
-      become: true
-      ansible.builtin.template:
-        src: spacelift.conf.j2
-        dest: /etc/httpd/conf.d/spacelift.conf
-        mode: 0644
-      notify: Restart server
-
-    - name: Copy web pages
-      become: true
-      ansible.builtin.template:
-        src: index.html.j2
-        dest: "{{ doc_root }}/index.html"
-
-    - name: Ensure httpd is running
-      become: true
-      ansible.builtin.service:
-        name: httpd
-        state: started
-      ignore_errors: "{{ ansible_check_mode }}"
-
-  handlers:
-    - name: Restart server
-      become: true
-      ansible.builtin.service:
-        name: httpd
-        state: restarted
-      ignore_errors: "{{ ansible_check_mode }}"
+    - name: Rebooting
+      ansible.builtin.reboot:
+        post_reboot_delay: 60
+      throttle: 1
+      when:
+        - reboot_required.rc == 1
+        - ansible_facts ['virtualization_role'] != 'host'
+...
